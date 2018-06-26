@@ -10,8 +10,6 @@ import {
 
 import TouchableItem from '../TouchableItem';
 
-const defaultBackImage = require('../assets/back-icon.png');
-
 class HeaderBackButton extends React.PureComponent {
   static defaultProps = {
     pressColorAndroid: 'rgba(0, 0, 0, .32)',
@@ -19,6 +17,8 @@ class HeaderBackButton extends React.PureComponent {
       ios: '#037aff',
     }),
     truncatedTitle: 'Back',
+    // eslint-disable-next-line global-require
+    buttonImage: require('../assets/back-icon.png'),
   };
 
   state = {};
@@ -32,37 +32,9 @@ class HeaderBackButton extends React.PureComponent {
     });
   };
 
-  _renderBackImage() {
-    const { backImage, title, tintColor } = this.props;
-
-    let BackImage;
-    let props;
-
-    if (React.isValidElement(backImage)) {
-      return backImage;
-    } else if (backImage) {
-      BackImage = backImage;
-      props = {
-        tintColor,
-        title,
-      };
-    } else {
-      BackImage = Image;
-      props = {
-        style: [
-          styles.icon,
-          !!title && styles.iconWithTitle,
-          !!tintColor && { tintColor },
-        ],
-        source: defaultBackImage,
-      };
-    }
-
-    return <BackImage {...props} />;
-  }
-
   render() {
     const {
+      buttonImage,
       onPress,
       pressColorAndroid,
       width,
@@ -92,7 +64,14 @@ class HeaderBackButton extends React.PureComponent {
         borderless
       >
         <View style={styles.container}>
-          {this._renderBackImage()}
+          <Image
+            style={[
+              styles.icon,
+              !!title && styles.iconWithTitle,
+              !!tintColor && { tintColor },
+            ]}
+            source={buttonImage}
+          />
           {Platform.OS === 'ios' &&
             typeof backButtonTitle === 'string' && (
               <Text

@@ -2,7 +2,7 @@ import React, { Component } from 'react';
 import { View } from 'react-native';
 import renderer from 'react-test-renderer';
 
-import SwitchNavigator from '../createContainedSwitchNavigator';
+import SwitchNavigator from '../SwitchNavigator';
 
 const A = () => <View />;
 const B = () => <View />;

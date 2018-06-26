@@ -7,7 +7,6 @@ import {
   Platform,
   StyleSheet,
   View,
-  I18nManager,
   ViewPropTypes,
 } from 'react-native';
 import { MaskedViewIOS } from '../../PlatformHelpers';
@@ -25,15 +24,12 @@ const TITLE_OFFSET = Platform.OS === 'ios' ? 70 : 56;
 
 const getAppBarHeight = isLandscape => {
   return Platform.OS === 'ios'
-    ? isLandscape && !Platform.isPad
-      ? 32
-      : 44
+    ? isLandscape && !Platform.isPad ? 32 : 44
     : 56;
 };
 
 class Header extends React.PureComponent {
   static defaultProps = {
-    layoutInterpolator: HeaderStyleInterpolator.forLayout,
     leftInterpolator: HeaderStyleInterpolator.forLeft,
     leftButtonInterpolator: HeaderStyleInterpolator.forLeftButton,
     leftLabelInterpolator: HeaderStyleInterpolator.forLeftLabel,
@@ -51,11 +47,11 @@ class Header extends React.PureComponent {
   };
 
   _getHeaderTitleString(scene) {
-    const options = scene.descriptor.options;
-    if (typeof options.headerTitle === 'string') {
-      return options.headerTitle;
+    const sceneOptions = this.props.getScreenDetails(scene).options;
+    if (typeof sceneOptions.headerTitle === 'string') {
+      return sceneOptions.headerTitle;
     }
-    return options.title;
+    return sceneOptions.title;
   }
 
   _getLastScene(scene) {
@@ -67,7 +63,7 @@ class Header extends React.PureComponent {
     if (!lastScene) {
       return null;
     }
-    const { headerBackTitle } = lastScene.descriptor.options;
+    const { headerBackTitle } = this.props.getScreenDetails(lastScene).options;
     if (headerBackTitle || headerBackTitle === null) {
       return headerBackTitle;
     }
@@ -79,20 +75,27 @@ class Header extends React.PureComponent {
     if (!lastScene) {
       return null;
     }
-    return lastScene.descriptor.options.headerTruncatedBackTitle;
+    return this.props.getScreenDetails(lastScene).options
+      .headerTruncatedBackTitle;
   }
 
+  _navigateBack = () => {
+    requestAnimationFrame(() => {
+      this.props.navigation.goBack(this.props.scene.route.key);
+    });
+  };
+
   _renderTitleComponent = props => {
-    const { options } = props.scene.descriptor;
-    const headerTitle = options.headerTitle;
+    const details = this.props.getScreenDetails(props.scene);
+    const headerTitle = details.options.headerTitle;
     if (React.isValidElement(headerTitle)) {
       return headerTitle;
     }
     const titleString = this._getHeaderTitleString(props.scene);
 
-    const titleStyle = options.headerTitleStyle;
-    const color = options.headerTintColor;
-    const allowFontScaling = options.headerTitleAllowFontScaling;
+    const titleStyle = details.options.headerTitleStyle;
+    const color = details.options.headerTintColor;
+    const allowFontScaling = details.options.headerTitleAllowFontScaling;
 
     // On iOS, width of left/right components depends on the calculated
     // size of the title.
@@ -124,7 +127,8 @@ class Header extends React.PureComponent {
   };
 
   _renderLeftComponent = props => {
-    const { options } = props.scene.descriptor;
+    const { options } = this.props.getScreenDetails(props.scene);
+
     if (
       React.isValidElement(options.headerLeft) ||
       options.headerLeft === null
@@ -144,18 +148,12 @@ class Header extends React.PureComponent {
       ? (this.props.layout.initWidth - this.state.widths[props.scene.key]) / 2
       : undefined;
     const RenderedLeftComponent = options.headerLeft || HeaderBackButton;
-    const goBack = () => {
-      // Go back on next tick because button ripple effect needs to happen on Android
-      requestAnimationFrame(() => {
-        props.scene.descriptor.navigation.goBack(props.scene.descriptor.key);
-      });
-    };
     return (
       <RenderedLeftComponent
-        onPress={goBack}
+        onPress={this._navigateBack}
         pressColorAndroid={options.headerPressColorAndroid}
         tintColor={options.headerTintColor}
-        backImage={options.headerBackImage}
+        buttonImage={options.headerBackImage}
         title={backButtonTitle}
         truncatedTitle={truncatedBackButtonTitle}
         titleStyle={options.headerBackTitleStyle}
@@ -169,7 +167,7 @@ class Header extends React.PureComponent {
     ButtonContainerComponent,
     LabelContainerComponent
   ) => {
-    const { options, navigation } = props.scene.descriptor;
+    const { options } = this.props.getScreenDetails(props.scene);
     const backButtonTitle = this._getBackButtonTitleString(props.scene);
     const truncatedBackButtonTitle = this._getTruncatedBackButtonTitle(
       props.scene
@@ -178,21 +176,14 @@ class Header extends React.PureComponent {
       ? (this.props.layout.initWidth - this.state.widths[props.scene.key]) / 2
       : undefined;
 
-    const goBack = () => {
-      // Go back on next tick because button ripple effect needs to happen on Android
-      requestAnimationFrame(() => {
-        navigation.goBack(props.scene.descriptor.key);
-      });
-    };
-
     return (
       <ModularHeaderBackButton
-        onPress={goBack}
+        onPress={this._navigateBack}
         ButtonContainerComponent={ButtonContainerComponent}
         LabelContainerComponent={LabelContainerComponent}
         pressColorAndroid={options.headerPressColorAndroid}
         tintColor={options.headerTintColor}
-        backImage={options.headerBackImage}
+        buttonImage={options.headerBackImage}
         title={backButtonTitle}
         truncatedTitle={truncatedBackButtonTitle}
         titleStyle={options.headerBackTitleStyle}
@@ -202,12 +193,13 @@ class Header extends React.PureComponent {
   };
 
   _renderRightComponent = props => {
-    const { headerRight } = props.scene.descriptor.options;
+    const details = this.props.getScreenDetails(props.scene);
+    const { headerRight } = details.options;
     return headerRight || null;
   };
 
   _renderLeft(props) {
-    const { options } = props.scene.descriptor;
+    const { options } = this.props.getScreenDetails(props.scene);
 
     const { transitionPreset } = this.props;
 
@@ -374,10 +366,6 @@ class Header extends React.PureComponent {
   }
 
   _renderHeader(props) {
-    const { options } = props.scene.descriptor;
-    if (options.header === null) {
-      return null;
-    }
     const left = this._renderLeft(props);
     const right = this._renderRight(props);
     const title = this._renderTitle(props, {
@@ -386,6 +374,7 @@ class Header extends React.PureComponent {
     });
 
     const { isLandscape, transitionPreset } = this.props;
+    const { options } = this.props.getScreenDetails(props.scene);
 
     const wrapperProps = {
       style: styles.header,
@@ -450,7 +439,7 @@ class Header extends React.PureComponent {
       });
     }
 
-    const { options } = scene.descriptor;
+    const { options } = this.props.getScreenDetails(scene);
     const { headerStyle = {} } = options;
     const headerStyleObj = StyleSheet.flatten(headerStyle);
     const appBarHeight = getAppBarHeight(isLandscape);
@@ -491,14 +480,10 @@ class Header extends React.PureComponent {
     const forceInset = headerForceInset || { top: 'always', bottom: 'never' };
 
     return (
-      <Animated.View style={this.props.layoutInterpolator(this.props)}>
-        <SafeAreaView forceInset={forceInset} style={containerStyles}>
-          <View style={StyleSheet.absoluteFill}>
-            {options.headerBackground}
-          </View>
-          <View style={styles.flexOne}>{appBar}</View>
-        </SafeAreaView>
-      </Animated.View>
+      <SafeAreaView forceInset={forceInset} style={containerStyles}>
+        <View style={StyleSheet.absoluteFill}>{options.headerBackground}</View>
+        <View style={{ flex: 1 }}>{appBar}</View>
+      </SafeAreaView>
     );
   }
 }
@@ -566,7 +551,6 @@ const styles = StyleSheet.create({
     marginTop: -0.5, // resizes down to 20.5
     alignSelf: 'center',
     resizeMode: 'contain',
-    transform: [{ scaleX: I18nManager.isRTL ? -1 : 1 }],
   },
   title: {
     bottom: 0,
@@ -593,9 +577,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  flexOne: {
-    flex: 1,
   },
 });
 

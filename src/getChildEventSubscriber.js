@@ -4,24 +4,13 @@
  * Based on the 'action' events that get fired for this navigation state, this utility will fire
  * focus and blur events for this child
  */
+
 export default function getChildEventSubscriber(addListener, key) {
   const actionSubscribers = new Set();
   const willFocusSubscribers = new Set();
   const didFocusSubscribers = new Set();
   const willBlurSubscribers = new Set();
   const didBlurSubscribers = new Set();
-
-  const removeAll = () => {
-    [
-      actionSubscribers,
-      willFocusSubscribers,
-      didFocusSubscribers,
-      willBlurSubscribers,
-      didBlurSubscribers,
-    ].forEach(set => set.clear());
-
-    upstreamSubscribers.forEach(subs => subs && subs.remove());
-  };
 
   const getChildSubscribers = evtName => {
     switch (evtName) {
@@ -54,6 +43,10 @@ export default function getChildEventSubscriber(addListener, key) {
   // event will cause onFocus+willFocus events because we had previously been
   // considered blurred
   let lastEmittedEvent = 'didBlur';
+
+  const cleanup = () => {
+    upstreamSubscribers.forEach(subs => subs && subs.remove());
+  };
 
   const upstreamEvents = [
     'willFocus',
@@ -138,24 +131,18 @@ export default function getChildEventSubscriber(addListener, key) {
           emit((lastEmittedEvent = 'didBlur'), childPayload);
         }
       }
-
-      if (lastEmittedEvent === 'didBlur' && !newRoute) {
-        removeAll();
-      }
     })
   );
 
-  return {
-    addListener(eventName, eventHandler) {
-      const subscribers = getChildSubscribers(eventName);
-      if (!subscribers) {
-        throw new Error(`Invalid event name "${eventName}"`);
-      }
-      subscribers.add(eventHandler);
-      const remove = () => {
-        subscribers.delete(eventHandler);
-      };
-      return { remove };
-    },
+  return (eventName, eventHandler) => {
+    const subscribers = getChildSubscribers(eventName);
+    if (!subscribers) {
+      throw new Error(`Invalid event name "${eventName}"`);
+    }
+    subscribers.add(eventHandler);
+    const remove = () => {
+      subscribers.delete(eventHandler);
+    };
+    return { remove };
   };
 }

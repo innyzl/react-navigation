@@ -1,19 +1,27 @@
 import React from 'react';
 import SceneView from '../SceneView';
+import withCachedChildNavigation from '../../withCachedChildNavigation';
 
-export default class SwitchView extends React.Component {
+class SwitchContainer extends React.Component {
   render() {
-    const { state } = this.props.navigation;
-    const activeKey = state.routes[state.index].key;
-    const descriptor = this.props.descriptors[activeKey];
-    const ChildComponent = descriptor.getComponent();
+    const { screenProps } = this.props;
+
+    const route = this.props.navigation.state.routes[
+      this.props.navigation.state.index
+    ];
+    const childNavigation = this.props.childNavigationProps[route.key];
+    const ChildComponent = this.props.router.getComponentForRouteName(
+      route.routeName
+    );
 
     return (
       <SceneView
         component={ChildComponent}
-        navigation={descriptor.navigation}
-        screenProps={this.props.screenProps}
+        navigation={childNavigation}
+        screenProps={screenProps}
       />
     );
   }
 }
+
+export default withCachedChildNavigation(SwitchContainer);

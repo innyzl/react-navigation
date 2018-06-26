@@ -3,16 +3,13 @@ import getScreenForRouteName from './getScreenForRouteName';
 import createConfigGetter from './createConfigGetter';
 
 import NavigationActions from '../NavigationActions';
-import StackActions from './StackActions';
 import validateRouteConfigMap from './validateRouteConfigMap';
-
-const defaultActionCreators = (route, navStateKey) => ({});
+import getScreenConfigDeprecated from './getScreenConfigDeprecated';
 
 function childrenUpdateWithoutSwitchingIndex(actionType) {
   return [
     NavigationActions.SET_PARAMS,
-    // Todo: make SwitchRouter not depend on StackActions..
-    StackActions.COMPLETE_TRANSITION,
+    NavigationActions.COMPLETE_TRANSITION,
   ].includes(actionType);
 }
 
@@ -22,9 +19,6 @@ export default (routeConfigs, config = {}) => {
 
   const order = config.order || Object.keys(routeConfigs);
   const paths = config.paths || {};
-  const getCustomActionCreators =
-    config.getCustomActionCreators || defaultActionCreators;
-
   const initialRouteParams = config.initialRouteParams;
   const initialRouteName = config.initialRouteName || order[0];
   const backBehavior = config.backBehavior || 'none';
@@ -34,12 +28,11 @@ export default (routeConfigs, config = {}) => {
     : true;
   const initialRouteIndex = order.indexOf(initialRouteName);
   const childRouters = {};
+
   order.forEach(routeName => {
     const routeConfig = routeConfigs[routeName];
-    if (!paths[routeName]) {
-      paths[routeName] =
-        typeof routeConfig.path === 'string' ? routeConfig.path : routeName;
-    }
+    paths[routeName] =
+      typeof routeConfig.path === 'string' ? routeConfig.path : routeName;
     childRouters[routeName] = null;
     const screen = getScreenForRouteName(routeConfigs, routeName);
     if (screen.router) {
@@ -73,47 +66,41 @@ export default (routeConfigs, config = {}) => {
     };
   }
 
-  function getNextState(prevState, possibleNextState) {
-    if (!prevState) {
-      return possibleNextState;
-    }
-
-    let nextState;
-    if (prevState.index !== possibleNextState.index && resetOnBlur) {
-      const prevRouteName = prevState.routes[prevState.index].routeName;
-      const nextRoutes = [...possibleNextState.routes];
-      nextRoutes[prevState.index] = resetChildRoute(prevRouteName);
-
-      return {
-        ...possibleNextState,
-        routes: nextRoutes,
-      };
-    } else {
-      nextState = possibleNextState;
-    }
-
-    return nextState;
-  }
-
-  function getInitialState() {
-    const routes = order.map(resetChildRoute);
-    return {
-      routes,
-      index: initialRouteIndex,
-      isTransitioning: false,
-    };
-  }
-
   return {
-    childRouters,
+    getInitialState() {
+      const routes = order.map(resetChildRoute);
+      return {
+        routes,
+        index: initialRouteIndex,
+        isTransitioning: false,
+      };
+    },
 
-    getActionCreators(route, stateKey) {
-      return getCustomActionCreators(route, stateKey);
+    getNextState(prevState, possibleNextState) {
+      if (!prevState) {
+        return possibleNextState;
+      }
+
+      let nextState;
+      if (prevState.index !== possibleNextState.index && resetOnBlur) {
+        const prevRouteName = prevState.routes[prevState.index].routeName;
+        const nextRoutes = [...possibleNextState.routes];
+        nextRoutes[prevState.index] = resetChildRoute(prevRouteName);
+
+        return {
+          ...possibleNextState,
+          routes: nextRoutes,
+        };
+      } else {
+        nextState = possibleNextState;
+      }
+
+      return nextState;
     },
 
     getStateForAction(action, inputState) {
       let prevState = inputState ? { ...inputState } : inputState;
-      let state = inputState || getInitialState();
+      let state = inputState || this.getInitialState();
       let activeChildIndex = state.index;
 
       if (action.type === NavigationActions.INIT) {
@@ -150,7 +137,7 @@ export default (routeConfigs, config = {}) => {
         if (activeChildState && activeChildState !== activeChildLastState) {
           const routes = [...state.routes];
           routes[state.index] = activeChildState;
-          return getNextState(prevState, {
+          return this.getNextState(prevState, {
             ...state,
             routes,
           });
@@ -159,20 +146,23 @@ export default (routeConfigs, config = {}) => {
 
       // Handle tab changing. Do this after letting the current tab try to
       // handle the action, to allow inner children to change first
-      const isBackEligible =
-        action.key == null || action.key === activeChildLastState.key;
-      if (action.type === NavigationActions.BACK) {
-        if (isBackEligible && shouldBackNavigateToInitialRoute) {
-          activeChildIndex = initialRouteIndex;
-        } else {
-          return state;
+      if (backBehavior !== 'none') {
+        const isBackEligible =
+          action.key == null || action.key === activeChildLastState.key;
+        if (action.type === NavigationActions.BACK) {
+          if (isBackEligible && shouldBackNavigateToInitialRoute) {
+            activeChildIndex = initialRouteIndex;
+          } else {
+            return state;
+          }
         }
       }
 
       let didNavigate = false;
       if (action.type === NavigationActions.NAVIGATE) {
+        const navigateAction = action;
         didNavigate = !!order.find((childId, i) => {
-          if (childId === action.routeName) {
+          if (childId === navigateAction.routeName) {
             activeChildIndex = i;
             return true;
           }
@@ -180,14 +170,15 @@ export default (routeConfigs, config = {}) => {
         });
         if (didNavigate) {
           const childState = state.routes[activeChildIndex];
-          const childRouter = childRouters[action.routeName];
           let newChildState;
+
+          const childRouter = childRouters[action.routeName];
 
           if (action.action) {
             newChildState = childRouter
               ? childRouter.getStateForAction(action.action, childState)
               : null;
-          } else if (!action.action && !childRouter && action.params) {
+          } else if (!childRouter && action.params) {
             newChildState = {
               ...childState,
               params: {
@@ -200,17 +191,11 @@ export default (routeConfigs, config = {}) => {
           if (newChildState && newChildState !== childState) {
             const routes = [...state.routes];
             routes[activeChildIndex] = newChildState;
-            return getNextState(prevState, {
+            return this.getNextState(prevState, {
               ...state,
               routes,
               index: activeChildIndex,
             });
-          } else if (
-            !newChildState &&
-            state.index === activeChildIndex &&
-            prevState
-          ) {
-            return null;
           }
         }
       }
@@ -228,7 +213,7 @@ export default (routeConfigs, config = {}) => {
             ...lastRoute,
             params,
           };
-          return getNextState(prevState, {
+          return this.getNextState(prevState, {
             ...state,
             routes,
           });
@@ -236,14 +221,14 @@ export default (routeConfigs, config = {}) => {
       }
 
       if (activeChildIndex !== state.index) {
-        return getNextState(prevState, {
+        return this.getNextState(prevState, {
           ...state,
           index: activeChildIndex,
         });
       } else if (didNavigate && !inputState) {
         return state;
       } else if (didNavigate) {
-        return { ...state };
+        return null;
       }
 
       // Let other children handle it and switch to the first child that returns a new state
@@ -280,7 +265,7 @@ export default (routeConfigs, config = {}) => {
       }
 
       if (index !== state.index || routes !== state.routes) {
-        return getNextState(prevState, {
+        return this.getNextState(prevState, {
           ...state,
           index,
           routes,
@@ -334,31 +319,22 @@ export default (routeConfigs, config = {}) => {
      * This will return null if there is no action matched
      */
     getActionForPathAndParams(path, params) {
-      if (!path) {
-        return NavigationActions.navigate({
-          routeName: initialRouteName,
-          params,
-        });
-      }
       return (
         order
           .map(childId => {
             const parts = path.split('/');
             const pathToTest = paths[childId];
-            const partsInTestPath = pathToTest.split('/').length;
-            const pathPartsToTest = parts.slice(0, partsInTestPath).join('/');
-            if (pathPartsToTest === pathToTest) {
+            if (parts[0] === pathToTest) {
               const childRouter = childRouters[childId];
               const action = NavigationActions.navigate({
                 routeName: childId,
               });
               if (childRouter && childRouter.getActionForPathAndParams) {
                 action.action = childRouter.getActionForPathAndParams(
-                  parts.slice(partsInTestPath).join('/'),
+                  parts.slice(1).join('/'),
                   params
                 );
-              }
-              if (params) {
+              } else if (params) {
                 action.params = params;
               }
               return action;
@@ -382,5 +358,7 @@ export default (routeConfigs, config = {}) => {
       routeConfigs,
       config.navigationOptions
     ),
+
+    getScreenConfig: getScreenConfigDeprecated,
   };
 };
